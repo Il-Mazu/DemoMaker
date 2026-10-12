@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture</title>
+<link rel="stylesheet" href="fixture.css">
+<style>
+  html, body { margin: 0; background: #fff; }
+  body { height: 1200px; }
+  .mark { position: fixed; left: 0; width: 120px; height: 120px; }
+  #colour { top: 0; }  /* its colour comes from fixture.css, so the test also proves files next to the page are served */
+  /* Turns green on :hover and stays green: the way back is delayed past the end of any video. */
+  #hovered { top: 130px; background: rgb(255, 0, 0); transition: background 0s 9999s; }
+  #btn:hover ~ #hovered { background: rgb(0, 200, 0); transition: none; }
+  #scrolled { top: 260px; background: rgb(255, 0, 0); }
+  #scrolled.yes { background: rgb(0, 0, 255); }
+  #enter { position: absolute; left: 300px; top: 20px; width: 120px; height: 120px; background: #000; animation: appear 1s linear both; }
+  @keyframes appear { from { opacity: 0; } }
+  #btn { position: absolute; left: 480px; top: 200px; width: 200px; height: 60px; border: 0; background: #ddd; cursor: pointer; transition: transform .2s; }
+  #btn:hover { transform: scale(1.05); }
+</style>
+</head>
+<body>
+<button id="btn">Hover me</button>
+<div id="colour" class="mark"></div>
+<div id="hovered" class="mark"></div>
+<div id="scrolled" class="mark"></div>
+<div id="enter"></div>
+<script>
+  addEventListener('scroll', () => {
+    if (scrollY >= document.documentElement.scrollHeight - innerHeight - 1) document.getElementById('scrolled').classList.add('yes');
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "demomaker",
+  "version": "0.1.0",
+  "description": "Turn an HTML page into a polished macOS-style showcase video",
+  "type": "module",
+  "private": true,
+  "bin": { "demomaker": "demomaker.js" },
+  "scripts": {
+    "start": "node demomaker.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=22" }
+}

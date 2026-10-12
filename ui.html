@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DemoMaker</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f7; --card: #fff; --well: #e9e9ed; --text: #1d1d1f; --soft: #6e6e73; --line: rgba(0, 0, 0, .1); --accent: #0071e3; --danger: #c9302c;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161617; --card: #232325; --well: #333336; --text: #f5f5f7; --soft: #a1a1a6; --line: rgba(255, 255, 255, .12); --accent: #2997ff; --danger: #ff6961; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 Inter, "Adwaita Sans", system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 1240px; margin: 0 auto; padding: 36px 28px 56px; }
+  h1 { font-size: 28px; line-height: 1.1; letter-spacing: -.02em; margin: 0; }
+  header p { margin: 6px 0 26px; color: var(--soft); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+
+  .stage { position: relative; display: grid; place-items: center; max-height: 76vh; margin: 0 auto; width: 100%; border-radius: 16px; background: var(--card); border: 1px solid var(--line); overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+  .stage > * { grid-area: 1 / 1; }
+  .stage[data-drag] { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  .drop { width: 100%; height: 100%; display: grid; place-content: center; justify-items: center; gap: 6px; padding: 24px; text-align: center; cursor: pointer; }
+  .drop svg { width: 44px; height: 44px; margin-bottom: 8px; color: var(--soft); }
+  .drop strong { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+  .drop span { color: var(--soft); }
+  .drop u { color: var(--accent); text-decoration: none; }
+  .drop:focus-visible { outline: 2px solid var(--accent); outline-offset: -6px; border-radius: 14px; }
+  .working { width: min(420px, 80%); text-align: center; }
+  .working strong { display: block; font-weight: 600; margin-bottom: 14px; }
+  progress { display: block; width: 100%; height: 6px; accent-color: var(--accent); }
+  .working span, .problem { color: var(--soft); font-size: 13px; }
+  .working span { display: block; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .problem { max-width: 80%; text-align: center; white-space: pre-wrap; }
+  .problem strong { display: block; color: var(--danger); font-size: 15px; margin-bottom: 6px; }
+  video { width: 100%; height: 100%; background: #000; }
+  [data-state="empty"] :is(.working, .problem, video), [data-state="ready"] :is(.working, .problem, video),
+  [data-state="working"] :is(.drop, .problem, video), [data-state="done"] :is(.drop, .working, .problem),
+  [data-state="error"] :is(.drop, .working, video) { display: none; }
+
+  .after { display: flex; gap: 10px; align-items: center; margin-top: 14px; min-height: 40px; color: var(--soft); font-size: 13px; }
+  .after span { margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: grid; gap: 16px; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend, .field > span { padding: 0; margin-bottom: 7px; font-size: 12px; font-weight: 600; color: var(--soft); display: block; }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; padding: 2px; border-radius: 9px; background: var(--well); }
+  .seg label { position: relative; padding: 6px 4px; border-radius: 7px; text-align: center; font-size: 13px; cursor: pointer; transition: background .15s, box-shadow .15s; }
+  .seg input, .swatches input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+  .seg label:has(:checked) { background: var(--card); font-weight: 600; box-shadow: 0 1px 2px rgba(0, 0, 0, .14), 0 0 0 .5px var(--line); }
+  .seg label:has(:focus-visible), .swatches label:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .swatches { display: flex; gap: 10px; }
+  .swatches label { position: relative; width: 38px; height: 38px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line); cursor: pointer; transition: transform .15s var(--ease); }
+  .swatches label:has(:checked) { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
+  .swatches label:active { transform: scale(.94); }
+  input[type="text"] { width: 100%; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: inherit; font: inherit; font-size: 13px; }
+  input[type="text"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hint { margin: 7px 0 0; font-size: 12px; color: var(--soft); }
+
+  button, .button { display: inline-grid; place-items: center; height: 40px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; transition: transform .1s ease-out, opacity .15s; }
+  button:active, .button:active { transform: scale(.97); }
+  button:disabled { opacity: .4; cursor: default; transform: none; }
+  button:focus-visible, .button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .quiet { background: var(--well); color: var(--text); }
+  .panel button { width: 100%; height: 44px; }
+  [hidden] { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>DemoMaker</h1>
+    <p>Drop in a page. Get back a showcase video.</p>
+  </header>
+  <div class="layout">
+    <div>
+      <section class="stage" id="stage" data-state="empty" aria-live="polite">
+        <label class="drop" id="drop" tabindex="0">
+          <input type="file" id="file" accept=".html,.htm,text/html" hidden>
+          <svg viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 29V9M14 17l8-8 8 8"/><path d="M8 27v4a4 4 0 0 0 4 4h20a4 4 0 0 0 4-4v-4"/></svg>
+          <strong id="headline">Drop an HTML file here</strong>
+          <span id="subline">or <u>choose a file</u></span>
+        </label>
+        <div class="working">
+          <strong id="working-title">Rendering</strong>
+          <progress id="bar" max="1" value="0"></progress>
+          <span id="working-detail">Starting…</span>
+        </div>
+        <div class="problem" role="alert"><strong>That did not work</strong><span id="problem"></span></div>
+        <video id="video" controls loop muted playsinline></video>
+      </section>
+      <div class="after" id="after" hidden>
+        <span id="saved"></span>
+        <button class="quiet" id="again" type="button">New page</button>
+        <a class="button" id="download">Download</a>
+      </div>
+    </div>
+
+    <form class="panel" id="panel">
+      <div id="groups" style="display:grid;gap:16px"></div>
+      <label class="field"><span>Address bar</span><input type="text" name="address" placeholder="Uses the page title" autocomplete="off" spellcheck="false"></label>
+      <button id="go" disabled>Render video</button>
+    </form>
+  </div>
+</main>
+
+<script type="module">
+import { BACKGROUNDS, RATIOS } from './director.js';
+
+const $ = id => document.getElementById(id);
+const stage = $('stage'), panel = $('panel'), go = $('go'), fileInput = $('file');
+const GROUPS = [
+  ['ratio', 'Format', Object.keys(RATIOS).map(r => [r, r]), '16:9'],
+  ['quality', 'Quality', [['draft', 'Draft'], ['high', 'High'], ['4k', '4K']], 'high', 'Draft is about three times faster. 4K doubles the resolution.'],
+  ['zoom', 'Camera', [['off', 'Static'], ['subtle', 'Subtle'], ['close', 'Close-up']], 'subtle', 'How far the camera pushes in on hovered details.'],
+  ['pace', 'Pace', [['1.4', 'Relaxed'], ['1', 'Normal'], ['0.65', 'Brisk']], '1'],
+  ['chrome', 'Window', [['safari', 'Safari'], ['minimal', 'Minimal']], 'safari'],
+  ['scheme', 'Page theme', [['light', 'Light'], ['dark', 'Dark']], 'light'],
+];
+
+// Remembered between visits. Storage can be unavailable (private windows); then nothing is remembered.
+let saved = {};
+try { saved = JSON.parse(localStorage.getItem('demomaker') || '{}'); } catch {}
+
+const radio = (name, value, picked) => `<input type="radio" name="${name}" value="${value}"${picked ? ' checked' : ''}>`;
+$('groups').innerHTML = GROUPS.map(([name, title, choices, fallback, hint]) => {
+  const current = choices.some(([v]) => v === saved[name]) ? saved[name] : fallback;
+  return `<fieldset><legend>${title}</legend><div class="seg">${choices.map(([v, label]) => `<label>${radio(name, v, v === current)}${label}</label>`).join('')}</div>${hint ? `<p class="hint">${hint}</p>` : ''}</fieldset>`;
+}).join('') + `<fieldset><legend>Background</legend><div class="swatches">${Object.entries(BACKGROUNDS).map(([name, css]) =>
+  `<label style="background:${css}" title="${name}">${radio('background', name, name === (BACKGROUNDS[saved.background] ? saved.background : 'aurora'))}<span hidden>${name}</span></label>`).join('')}</div></fieldset>`;
+panel.elements.address.value = saved.address || '';
+
+const options = () => Object.fromEntries(new FormData(panel));
+const fitStage = () => { const { width, height } = RATIOS[options().ratio]; stage.style.aspectRatio = `${width} / ${height}`; stage.style.maxWidth = `calc(76vh * ${width / height})`; };
+fitStage();
+panel.addEventListener('change', () => {
+  if (stage.dataset.state !== 'done') fitStage();
+  try { localStorage.setItem('demomaker', JSON.stringify(options())); } catch {}
+});
+
+let page = null, busy = false;
+function setState(state) {
+  stage.dataset.state = state;
+  go.disabled = !page || busy;
+  go.textContent = busy ? 'Rendering…' : state === 'done' || state === 'error' ? 'Render again' : 'Render video';
+  $('after').hidden = state !== 'done';
+}
+
+function choose(file) {
+  if (!file || busy) return;
+  if (!/\.html?$/i.test(file.name) && file.type !== 'text/html') return fail('DemoMaker needs an .html file. Pick the page itself, not a folder or an archive.');
+  page = file;
+  $('headline').textContent = file.name;
+  $('subline').innerHTML = `${(file.size / 1024).toFixed(file.size < 10240 ? 1 : 0)} KB · <u>choose another</u>`;
+  $('video').removeAttribute('src');
+  fitStage();
+  setState('ready');
+}
+function fail(message) { busy = false; $('problem').textContent = message; setState('error'); }
+
+fileInput.addEventListener('change', () => choose(fileInput.files[0]));
+$('drop').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+for (const type of ['dragenter', 'dragover']) addEventListener(type, e => { e.preventDefault(); if (!busy) stage.dataset.drag = ''; });
+addEventListener('dragleave', e => { if (!e.relatedTarget) delete stage.dataset.drag; });
+addEventListener('drop', e => { e.preventDefault(); delete stage.dataset.drag; choose(e.dataTransfer.files[0]); });
+$('again').addEventListener('click', () => { $('video').pause(); fitStage(); setState(page ? 'ready' : 'empty'); fileInput.click(); });
+
+panel.addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!page || busy) return;
+  busy = true;
+  $('video').pause();
+  $('bar').value = 0;
+  $('working-title').textContent = `Rendering ${page.name}`;
+  $('working-detail').textContent = 'Starting…';
+  fitStage();
+  setState('working');
+  try {
+    const sent = await fetch('/api/render?' + new URLSearchParams({ name: page.name, ...options() }), { method: 'POST', body: page, headers: { 'x-demomaker': '1' } });
+    const { id, error } = await sent.json();
+    if (!sent.ok) throw new Error(error);
+    for (;;) {
+      await new Promise(r => setTimeout(r, 400));
+      const job = await (await fetch(`/api/jobs/${id}`)).json();
+      if (job.state === 'error') throw new Error(job.error);
+      if (job.state === 'done') {
+        busy = false;
+        $('video').src = `/api/jobs/${id}/video`;
+        $('video').play().catch(() => {});
+        $('download').href = `/api/jobs/${id}/video?download`;
+        $('saved').textContent = `${job.seconds.toFixed(1)}s · saved as output/${job.file}`;
+        return setState('done');
+      }
+      $('bar').value = job.progress;
+      $('working-detail').textContent = job.state === 'queued' ? 'Waiting for the previous render…'
+        : job.frames ? `${Math.round(job.progress * 100)}% · ${job.frames} frames drawn` : 'Loading the page…';
+    }
+  } catch (err) {
+    fail(err.message === 'Failed to fetch' ? 'DemoMaker is not running any more. Start it again with: npm start' : err.message);
+  }
+});
+</script>
+</body>
+</html>

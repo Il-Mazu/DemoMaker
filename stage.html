@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DemoMaker stage</title>
+<script>
+  // Set up before the module loads, so a broken stage is reported instead of timing out.
+  window.__dm = { state: 'booting' };
+  addEventListener('error', e => { __dm.state = 'error: ' + e.message; });
+  addEventListener('unhandledrejection', e => { __dm.state = 'error: ' + (e.reason?.message || e.reason); });
+</script>
+<style>
+  @font-face { font-family: Inter; src: url(/__dm/inter.woff2) format("woff2"); font-weight: 100 900; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; }
+  /* Hidden until the first captured frame, which is then guaranteed to differ from the loading frames. */
+  #root { position: absolute; inset: 0; overflow: hidden; visibility: hidden; }
+  #bg, #world { position: absolute; inset: 0; transform-origin: 0 0; }
+  #frame { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+
+  #win {
+    --bar: #f6f6f6; --fg: #1d1d1f; --dim: rgba(0, 0, 0, .56); --faint: rgba(0, 0, 0, .24); --pill: rgba(0, 0, 0, .06); --line: rgba(0, 0, 0, .1);
+    position: relative; border-radius: 12px; overflow: hidden; background: var(--bar);
+    box-shadow: 0 0 0 .5px rgba(0, 0, 0, .3), 0 2px 5px rgba(0, 0, 0, .1), 0 16px 36px -6px rgba(0, 0, 0, .26), 0 48px 100px -18px rgba(0, 0, 0, .46);
+  }
+  #win.dark { --fg: #f5f5f7; --dim: rgba(255, 255, 255, .64); --faint: rgba(255, 255, 255, .26); --pill: rgba(255, 255, 255, .1); --line: rgba(255, 255, 255, .1); }
+  /* macOS draws a light inner edge on dark windows. */
+  #win.dark::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .13); pointer-events: none; }
+
+  #bar {
+    position: relative; box-sizing: border-box; height: var(--bar-h); display: flex; align-items: center;
+    border-bottom: 1px solid var(--line); color: var(--fg);
+    font: 500 13px/1 Inter, "Adwaita Sans", system-ui, sans-serif; letter-spacing: -.006em; -webkit-font-smoothing: antialiased;
+  }
+  .lights { display: flex; gap: 8px; margin-left: 19px; }
+  .lights i { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .16); }
+  .lights i:nth-child(1) { background: #ff5f57; }
+  .lights i:nth-child(2) { background: #febc2e; }
+  .lights i:nth-child(3) { background: #28c840; }
+  .icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.45; stroke-linecap: round; stroke-linejoin: round; }
+  .nav { display: flex; align-items: center; gap: 14px; margin-left: 24px; color: var(--dim); }
+  .nav .chev { width: 16px; margin-left: 6px; }
+  .nav .chev + .chev { margin-left: 0; color: var(--faint); }
+  .address {
+    position: absolute; left: 50%; top: 50%; translate: -50% -50%; box-sizing: border-box; width: min(44%, 620px); height: 30px; padding: 0 34px;
+    border-radius: 8px; background: var(--pill); display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .address span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .address .lock { flex: none; width: 9px; height: 12px; fill: var(--dim); }
+  .address .reload { position: absolute; right: 9px; width: 15px; height: 15px; color: var(--dim); }
+  .tools { display: flex; align-items: center; gap: 18px; margin: 0 17px 0 auto; color: var(--dim); }
+  #win.minimal .nav, #win.minimal .tools, #win.minimal .address svg { display: none; }
+  #win.minimal .address { background: none; font-weight: 600; color: var(--dim); }
+
+  #site { display: block; width: 100%; border: 0; background: #fff; }
+  /* macOS overlay scrollbar: only there while the page moves. */
+  #thumb { position: absolute; right: 3px; top: 0; width: 7px; border-radius: 4px; background: rgba(0, 0, 0, .46); box-shadow: 0 0 0 .5px rgba(255, 255, 255, .4); opacity: 0; pointer-events: none; }
+
+  #cursor { position: absolute; left: 0; top: 0; transform-origin: 0 0; opacity: 0; pointer-events: none; filter: drop-shadow(0 1px 1.3px rgba(0, 0, 0, .42)); }
+  #cursor svg { position: absolute; overflow: visible; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="bg"></div>
+  <div id="world">
+    <div id="frame">
+      <div id="win">
+        <div id="bar">
+          <div class="lights"><i></i><i></i><i></i></div>
+          <div class="nav">
+            <svg class="icon" viewBox="0 0 18 18"><rect x="1.6" y="3.1" width="14.8" height="11.8" rx="3"/><path d="M6.7 3.3v11.4"/></svg>
+            <svg class="icon chev" viewBox="0 0 16 18"><path d="M10 3.9 4.9 9l5.1 5.1"/></svg>
+            <svg class="icon chev" viewBox="0 0 16 18"><path d="M6 3.9 11.1 9 6 14.1"/></svg>
+          </div>
+          <div class="address">
+            <svg class="lock" viewBox="0 0 9 12"><path d="M1.5 5.2h6A1.3 1.3 0 0 1 8.8 6.5v3.9a1.3 1.3 0 0 1-1.3 1.3h-6A1.3 1.3 0 0 1 .2 10.4V6.5a1.3 1.3 0 0 1 1.3-1.3Z"/><path d="M2.3 5.4V3.3a2.2 2.2 0 0 1 4.4 0v2.1" fill="none" stroke="var(--dim)" stroke-width="1.15"/></svg>
+            <span id="address"></span>
+            <svg class="icon reload" viewBox="0 0 18 18"><path d="M14.6 9.4A5.7 5.7 0 1 1 13 5"/><path d="M13.6 2.2v3.2h-3.2"/></svg>
+          </div>
+          <div class="tools">
+            <svg class="icon" viewBox="0 0 18 18"><path d="M6.1 7H5a1.7 1.7 0 0 0-1.7 1.7v5.6A1.7 1.7 0 0 0 5 16h8a1.7 1.7 0 0 0 1.7-1.7V8.7A1.7 1.7 0 0 0 13 7h-1.1"/><path d="M9 10.9V2.2M6.3 4.7 9 2l2.7 2.7"/></svg>
+            <svg class="icon" viewBox="0 0 18 18"><path d="M9 3.4v11.2M3.4 9h11.2"/></svg>
+            <svg class="icon" viewBox="0 0 18 18"><rect x="2.2" y="5.7" width="10.1" height="10.1" rx="2.5"/><path d="M5.9 5.5v-.8a2.5 2.5 0 0 1 2.5-2.5h4.9a2.5 2.5 0 0 1 2.5 2.5v4.9a2.5 2.5 0 0 1-2.5 2.5h-.8"/></svg>
+          </div>
+        </div>
+        <iframe id="site" title="site"></iframe>
+        <div id="thumb"></div>
+      </div>
+    </div>
+    <div id="cursor">
+      <!-- Hand-drawn in the style of the macOS pointers. The element's origin is the hotspot. -->
+      <svg id="arrow" viewBox="-2 -2 16 24" width="16" height="24" style="left:-2px;top:-2px">
+        <path d="M0 0V16.3L3.8 12.7 6.5 19 8.9 18 6.2 11.8H11.5Z" fill="#fff" stroke="#fff" stroke-width="2.3" stroke-linejoin="round"/>
+        <path d="M0 0V16.3L3.8 12.7 6.5 19 8.9 18 6.2 11.8H11.5Z"/>
+      </svg>
+      <svg id="hand" viewBox="0 0 20 23" width="20" height="23" style="left:-7.8px;top:-1.6px;display:none" fill="#fff" stroke="#000" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round">
+        <path d="M6.2 12.9V3a1.6 1.6 0 0 1 3.2 0v5.3a1.5 1.5 0 0 1 3 0v.9a1.45 1.45 0 0 1 2.9 0v1a1.35 1.35 0 0 1 2.7 0v4.4c0 2.4-.9 4-2 5.9H8.3c-1-1.9-2.6-3.9-4.9-6.1-1-1-1.1-2.2-.3-2.9s1.9-.5 2.6.2Z"/>
+        <path d="M9.4 8.3v3.1M12.4 9.2v2.4M15.3 10.2v1.6" fill="none"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { BACKGROUNDS, BAR, MIN_SCORE, hoverBases, layout, nest, scoreTarget, shot } from './director.js';
+
+const cfg = JSON.parse(decodeURIComponent(location.hash.slice(1)));
+const $ = id => document.getElementById(id);
+const bar = BAR[cfg.chrome];
+const L = layout({ width: cfg.width, height: cfg.height, siteWidth: cfg.siteWidth, bar });
+const site = $('site'), win = $('win'), world = $('world'), bg = $('bg'), cursor = $('cursor'), thumb = $('thumb');
+const cursorScale = L.scale * 1.25;
+
+if (!BACKGROUNDS[cfg.background] && !CSS.supports('background', cfg.background)) throw new Error(`Unknown background "${cfg.background}"`);
+bg.style.background = BACKGROUNDS[cfg.background] || cfg.background;
+$('frame').style.transform = `translate(${L.x}px, ${L.y}px) scale(${L.scale})`;
+win.style.width = L.viewW + 'px';
+win.style.setProperty('--bar-h', bar + 'px');
+win.classList.toggle('minimal', cfg.chrome === 'minimal');
+site.style.height = L.viewH + 'px';
+
+// Any CSS colour -> [r, g, b, a].
+const ink = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+const rgba = css => { ink.clearRect(0, 0, 1, 1); ink.fillStyle = css; ink.fillRect(0, 0, 1, 1); return ink.getImageData(0, 0, 1, 1).data; };
+
+// Like Safari, the toolbar takes the page's colour.
+function tintBar(doc, view) {
+  const page = [doc.querySelector('meta[name="theme-color"]')?.content, view.getComputedStyle(doc.body).backgroundColor, view.getComputedStyle(doc.documentElement).backgroundColor]
+    .filter(c => c && CSS.supports('color', c)).map(rgba).find(c => c[3] === 255) || [255, 255, 255];
+  win.style.setProperty('--bar', `rgb(${page[0]}, ${page[1]}, ${page[2]})`);
+  win.classList.toggle('dark', 0.2126 * page[0] + 0.7152 * page[1] + 0.0722 * page[2] < 128);
+}
+
+// Everything the director needs to know about the page, measured once at scroll position 0.
+function scout(doc, view) {
+  const root = doc.scrollingElement || doc.documentElement, style = el => view.getComputedStyle(el);
+  const all = [...doc.body.querySelectorAll('*')];
+
+  // ponytail: pages that scroll inside a full-height container get the tallest one scrolled.
+  // Wheel-hijacking scroll libraries (transform-based "smooth scroll") are not handled; drive those with wheel events if needed.
+  let scroller = root;
+  if (root.scrollHeight <= L.viewH + 1) {
+    for (const el of all) {
+      if (el.scrollHeight > scroller.scrollHeight && el.scrollHeight > el.clientHeight + 40 && el.clientHeight > L.viewH * 0.6 && /auto|scroll/.test(style(el).overflowY)) scroller = el;
+    }
+  }
+  for (const el of new Set([root, doc.body, scroller])) { el.style.scrollBehavior = 'auto'; el.style.scrollSnapType = 'none'; }
+  scroller.scrollTo({ top: 0, behavior: 'instant' });
+  const maxScroll = Math.max(0, Math.round(scroller.scrollHeight - (scroller === root ? L.viewH : scroller.clientHeight)));
+
+  // Fixed and sticky elements; a wide short one at the top is a header that covers content under it.
+  const pinned = new Set();
+  let inset = 0;
+  for (const el of all) {
+    const pos = style(el).position;
+    if (pos !== 'fixed' && pos !== 'sticky') continue;
+    const r = el.getBoundingClientRect();
+    const header = r.top <= 8 && r.width >= L.viewW * 0.5 && r.height > 0 && r.height <= L.viewH * 0.3;
+    if (header) inset = Math.max(inset, Math.round(r.bottom));
+    if (pos === 'fixed' || header) pinned.add(el);
+  }
+  const isPinned = el => { for (; el; el = el.parentElement) if (pinned.has(el)) return true; return false; };
+
+  // Section tops: wide, tall blocks. Blocks much taller than the viewport are opened up for the sections inside them.
+  const blocks = [];
+  const big = el => { const r = el.getBoundingClientRect(); return r.height >= L.viewH * 0.3 && r.width >= L.viewW * 0.5 && !pinned.has(el); };
+  (function collect(el, depth) {
+    for (const kid of el.children) {
+      if (!big(kid)) continue;
+      const r = kid.getBoundingClientRect();
+      if (r.height > L.viewH * 1.3 && depth < 6 && [...kid.children].some(big)) collect(kid, depth + 1);
+      else blocks.push({ top: r.top });
+    }
+  })(doc.body, 0);
+
+  // Which elements have hover styles, read from the page's own CSS. Cross-origin stylesheets cannot be read and are skipped.
+  const PLAIN = /^(color|cursor|caret|outline|text-decoration|text-underline|-webkit-text)/;
+  const hover = new Map();
+  const walk = (rules, parent) => {
+    for (const rule of rules) {
+      if (rule.styleSheet) { try { walk(rule.styleSheet.cssRules); } catch {} continue; }
+      const selector = rule.selectorText && nest(rule.selectorText, parent);
+      if (selector) {
+        const rich = [...rule.style].some(prop => !PLAIN.test(prop));
+        for (const base of hoverBases(selector)) {
+          try { for (const el of doc.querySelectorAll(base)) hover.set(el, hover.get(el) || rich); } catch {}
+        }
+      }
+      if (rule.cssRules?.length) walk(rule.cssRules, selector || parent);
+    }
+  };
+  for (const sheet of doc.styleSheets) { try { walk(sheet.cssRules); } catch {} }
+
+  const els = [], targets = [];
+  const candidates = new Set([...hover.keys(), ...doc.querySelectorAll('a[href], button, [role="button"], summary')]);
+  for (const el of candidates) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8 || !el.checkVisibility({ visibilityProperty: true })) continue;
+    const cs = style(el), tag = el.tagName;
+    const surface = rgba(cs.backgroundColor)[3] > 0 || parseFloat(cs.borderTopWidth) > 0 || cs.backgroundImage !== 'none';
+    const fixed = isPinned(el);
+    const score = scoreTarget({
+      rich: hover.get(el) === true, plain: hover.get(el) === false,
+      transition: cs.transitionDuration.split(',').some(d => parseFloat(d) > 0),
+      pointer: cs.cursor === 'pointer',
+      buttonLike: tag === 'BUTTON' || ((tag === 'A' || el.getAttribute('role') === 'button') && surface && r.height >= 28),
+      area: r.width * r.height, viewArea: L.viewW * L.viewH,
+      inChrome: !!el.closest('nav, header, footer, [role="navigation"], [role="banner"], [role="contentinfo"]'),
+    });
+    if (score < MIN_SCORE) continue;
+    targets.push({ el, x: r.left, y: r.top, w: r.width, h: r.height, fixed, score, rich: hover.get(el) === true });
+  }
+  // Of two nested targets keep the better one; on a tie the inner one, since hovering it triggers both.
+  const kept = targets.filter(t => !targets.some(o => o !== t && (
+    (o.el.contains(t.el) && o.score > t.score) || (t.el.contains(o.el) && o.score >= t.score))));
+  kept.sort((a, b) => b.score - a.score).splice(400);
+  kept.forEach((t, id) => { els[id] = t.el; t.id = id; delete t.el; });
+
+  return { scroller, els, scout: { viewW: L.viewW, viewH: L.viewH, maxScroll, inset, blocks, targets: kept } };
+}
+
+async function prepare() {
+  const doc = site.contentDocument, view = site.contentWindow;
+  if (!doc?.body) throw new Error('the page never loaded');
+  for (const img of doc.images) img.loading = 'eager';
+  doc.body.getBoundingClientRect();  // lay the page out so its webfonts start loading
+  await Promise.race([hurried, Promise.all([doc.fonts.ready, ...[...doc.images].map(img => img.decode().catch(() => {}))])]);
+
+  $('address').textContent = cfg.address || doc.title || decodeURIComponent(cfg.site.slice(1));
+  tintBar(doc, view);
+  const { scroller, els, scout: found } = scout(doc, view);
+  const { viewW, viewH, maxScroll, inset } = found;
+
+  // On a roomy target such as a card, a spot where the arrow covers none of its text. Small targets get the default aim.
+  const clearSpot = (el, r) => {
+    if (r.width < 240 || r.height < 110) return null;
+    const texts = [], range = doc.createRange(), walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node; (node = walker.nextNode());) {
+      if (node.data.trim()) { range.selectNodeContents(node); texts.push(...range.getClientRects()); }
+    }
+    // The arrow hangs down and to the right of its tip, so text needs more room on those sides.
+    const covers = (x, y) => texts.some(t => x > t.left - 26 && x < t.right + 8 && y > t.top - 36 && y < t.bottom + 8);
+    for (const [fx, fy] of [[0.62, 0.6], [0.8, 0.8], [0.82, 0.5], [0.82, 0.22], [0.5, 0.86], [0.2, 0.86], [0.5, 0.4]]) {
+      const x = r.left + r.width * fx, y = r.top + r.height * fy, hit = doc.elementFromPoint(x, y);
+      if (hit && el.contains(hit) && !covers(x, y)) return { ax: x, ay: y };
+    }
+    return null;
+  };
+
+  const ctx = {
+    layout: L, frame: { w: cfg.width, h: cfg.height }, scout: found,
+    // Live position of a target, or null when it cannot be hovered right now.
+    rect(id) {
+      const el = els[id], r = el.getBoundingClientRect();
+      if (r.width < 8 || r.top < inset || r.bottom > viewH || r.left < 0 || r.right > viewW) return null;
+      if (!el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) return null;
+      const hit = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!hit || !(hit === el || el.contains(hit))) return null;
+      return { x: r.left, y: r.top, w: r.width, h: r.height, ...clearSpot(el, r) };
+    },
+    // True while the page has finite animations or transitions in flight. Endless loops do not count.
+    busy: () => doc.getAnimations().some(a => {
+      const end = a.playState === 'running' && a.effect?.getComputedTiming().endTime;
+      return Number.isFinite(end) && end < 8000;
+    }),
+  };
+  const frames = shot(ctx, { pace: cfg.pace, zoom: cfg.zoom });
+
+  const thumbH = Math.max(36, (viewH - 6) * viewH / (viewH + maxScroll));
+  thumb.style.height = thumbH + 'px';
+  let lastScroll = 0, sinceScroll = Infinity, thumbO = 0, parked = true, sent = 'park', shown = false;
+
+  // Advance the shot by one video frame and draw it. Returns what the renderer has to do for this frame.
+  __dm.tick = () => {
+    if (!shown) { $('root').style.visibility = 'visible'; shown = true; }
+    const { value: s, done } = frames.next();
+    if (done) return { done: true };
+
+    if (s.scroll !== lastScroll) { scroller.scrollTo({ top: s.scroll, behavior: 'instant' }); lastScroll = s.scroll; sinceScroll = 0; } else sinceScroll++;
+    thumbO = sinceScroll < 36 ? Math.min(1, thumbO + 1 / 6) : Math.max(0, thumbO - 1 / 20);
+    thumb.style.opacity = thumbO;
+    thumb.style.transform = `translateY(${bar + 3 + (maxScroll ? s.scroll / maxScroll : 0) * (viewH - 6 - thumbH)}px)`;
+
+    win.style.opacity = Math.min(1, s.win * 1.5);
+    win.style.transform = s.win === 1 ? '' : `translateY(${(1 - s.win) * 26}px) scale(${0.94 + 0.06 * s.win})`;
+
+    const { z, ox, oy } = s.cam, zb = 1 + (z - 1) * 0.4;  // the wallpaper zooms less than the window: a little depth
+    world.style.transform = z === 1 ? '' : `translate(${ox * (1 - z)}px, ${oy * (1 - z)}px) scale(${z})`;
+    bg.style.transform = z === 1 ? '' : `translate(${ox * (1 - zb)}px, ${oy * (1 - zb)}px) scale(${zb})`;
+
+    if (s.mouse === 'park') parked = true; else if (s.mouse === 'move') parked = false;
+    const cx = L.x + s.cursor.x * L.scale, cy = L.y + (bar + s.cursor.y) * L.scale;
+    cursor.style.transform = `translate(${cx}px, ${cy}px) scale(${cursorScale})`;
+    cursor.style.opacity = s.cursor.o;
+    const under = !parked && s.cursor.o > 0 && doc.elementFromPoint(s.cursor.x, s.cursor.y);
+    const pointing = !!under && view.getComputedStyle(under).cursor === 'pointer';
+    $('hand').style.display = pointing ? '' : 'none';
+    $('arrow').style.display = pointing ? 'none' : '';
+
+    // The real mouse follows the drawn cursor in frame coordinates, which also move when the camera does.
+    let mouse = null;
+    const at = parked ? 'park' : `${ox + z * (cx - ox)},${oy + z * (cy - oy)}`;
+    if (at !== sent) { sent = at; mouse = parked ? { x: 1, y: 1 } : { x: ox + z * (cx - ox), y: oy + z * (cy - oy) }; }
+    return { dt: s.dt, progress: s.progress, mouse };
+  };
+  __dm.info = { targets: found.targets.length, maxScroll };
+  __dm.state = 'ready';
+}
+
+// The renderer calls this when the page has kept it waiting too long (a resource that never answers):
+// carry on with whatever has arrived, as a visitor's browser would.
+let hurry;
+const hurried = new Promise(resolve => { hurry = resolve; });
+__dm.hurry = () => hurry();
+
+// The renderer starts the page load itself, at an exact point on the page clock.
+__dm.load = () => {
+  __dm.state = 'loading';
+  const loaded = new Promise(resolve => site.addEventListener('load', resolve, { once: true }));
+  site.src = cfg.site;
+  Promise.race([loaded, hurried]).then(prepare).catch(e => { __dm.state = 'error: ' + (e.message || e); });
+};
+document.fonts.load('500 13px Inter').then(() => { __dm.state = 'idle'; });
+</script>
+</body>
+</html>
